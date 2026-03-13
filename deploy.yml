@@ -18,3 +18,30 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
+```
+
+Click **Commit changes**.
+
+---
+
+### Step 2 — Enable GitHub Pages
+
+1. Go to your GitHub repo
+2. Click **Settings → Pages**
+3. Under **Source** select **"Deploy from a branch"**
+4. Select branch **`gh-pages`**
+5. Click **Save**
+
+---
+
+### Step 3 — Wait 2 minutes
+
+Go to **Actions tab** in your GitHub repo — you'll see the workflow running. Green checkmark = deployed ✅
+
+---
+
+### Your Live URLs
+```
+Home:        https://YOUR_USERNAME.github.io/react-yfubbvmv/
+Game:        https://YOUR_USERNAME.github.io/react-yfubbvmv/
+Leaderboard: https://YOUR_USERNAME.github.io/react-yfubbvmv/
