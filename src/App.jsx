@@ -23,8 +23,8 @@ export default function App() {
           flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', gap: 32
         }}>
-          <div style={{ fontSize: 36, letterSpacing: 8, fontWeight: 900 }}>
-            BUG HUNT
+          <div style={{ fontSize: 54, letterSpacing: 8, fontWeight: 900 }}>
+            PAYMENT AQA BUG HUNT
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 280 }}>
             <button onClick={() => setScreen('game')} style={{
