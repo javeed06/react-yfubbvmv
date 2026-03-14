@@ -49,7 +49,8 @@ const QUESTIONS_CONFIG = [
     </PmtId>
     <IntrBkSttlmAmt Ccy="NOK">555.49</IntrBkSttlmAmt>
     <IntrBkSttlmDt>2026-02-17</IntrBkSttlmDt>
-    <InstdAmt Ccy="NOK">555.49</InstdAmt>
+    <InstdAmt Ccy="NOK">555.49</InstdAmt>,
+    
     hint: "You will need a QA lens to find the tag.",
     expectedAnswer: ["UETR", "uetr", "<UETR>", "<uetr>", "Uetr"],
     points: 100,
