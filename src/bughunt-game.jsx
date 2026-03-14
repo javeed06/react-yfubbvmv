@@ -37,17 +37,21 @@ const QUESTIONS_CONFIG = [
   {
     id: "q1",
     type: "text",
-    title: "The Off-By-One Offender",
-    description: `A developer wrote a loop to print items 1–5:
+    title: "The ISO-20022 Expert",
+    description: `The ISO 20022 message snippet below is failing in our processing systems. Identify the error in the snippet.
 
-  for (let i = 0; i <= 5; i++) {
-    console.log(items[i]);
-  }
-
-The last iteration prints \`undefined\`.
-What is the correct loop condition?`,
-    hint: "Arrays are zero-indexed. Item 5 lives at index 4.",
-    expectedAnswer: "i < 5",
+    <CdtTrfTxInf>
+    <PmtId>
+    <InstrId>7908NOI02002080</InstrId>
+    <EndToEndId>20251122004</EndToEndId>
+    <TxId>7908NOI02002080</TxId>
+    <UETR>3ab2572f-3630-ØÆ34-92e7</UETR>
+    </PmtId>
+    <IntrBkSttlmAmt Ccy="NOK">555.49</IntrBkSttlmAmt>
+    <IntrBkSttlmDt>2026-02-17</IntrBkSttlmDt>
+    <InstdAmt Ccy="NOK">555.49</InstdAmt>
+    hint: "You will need a QA lens to find the tag.",
+    expectedAnswer: ["UETR", "uetr", "<UETR>", "<uetr>", "Uetr"],
     points: 100,
   },
 
