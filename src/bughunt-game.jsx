@@ -61,7 +61,7 @@ const QUESTIONS_CONFIG = [
     id: "q2",
     type: "choice",
     title: "The Equality Trap",
-    description: `What will this code print?
+    description: `What will  code print?
 
   console.log(0 == false);
   console.log(0 === false);`,
