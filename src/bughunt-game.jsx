@@ -1,25 +1,23 @@
 /**
  * BUG HUNT — ENHANCED GAME APP
- * Supports 4 question types:
- *   1. "text"   — type your answer (expectedAnswer can be array for multiple valid answers)
- *   2. "choice" — multiple choice
- *   3. "order"  — drag and drop code blocks
- *   4. any type + imageUrl — shows an image above the question
+ * Question types:
+ *   "text"   — type your answer (expectedAnswer: string or array of valid strings)
+ *   "choice" — single correct answer (expectedAnswer: string)
+ *   "multi"  — multiple correct answers, tick all that apply (expectedAnswer: array)
+ *              Scoring: partial points per correct selection, penalty for wrong picks
+ *   "order"  — drag and drop code blocks (expectedAnswer: "0,1,2,3")
+ *   any type + imageUrl — shows image above question
  */
 
 import React, { useState, useRef } from "react";
 
-// ─── Firebase ─────────────────────────────────────────────────────────────────
 const FIREBASE_URL = "https://bughunt-e86fb-default-rtdb.europe-west1.firebasedatabase.app";
 
 // =============================================================================
 // ADD / EDIT QUESTIONS HERE
-// NOTE: Use regular strings with \n for line breaks. Do NOT use backtick strings.
-// expectedAnswer can be a string OR an array of valid strings for text questions.
 // =============================================================================
 const QUESTIONS_CONFIG = [
 
-  // ── Text answer ─────────────────────────────────────────────────────────────
   {
     id: "q1",
     type: "text",
@@ -30,7 +28,6 @@ const QUESTIONS_CONFIG = [
     points: 100,
   },
 
-  // ── Multiple choice ─────────────────────────────────────────────────────────
   {
     id: "q2",
     type: "choice",
@@ -47,7 +44,6 @@ const QUESTIONS_CONFIG = [
     points: 100,
   },
 
-  // ── Drag & drop order ───────────────────────────────────────────────────────
   {
     id: "q3",
     type: "order",
@@ -65,26 +61,35 @@ const QUESTIONS_CONFIG = [
     points: 200,
   },
 
-  // ── Image + multiple choice ─────────────────────────────────────────────────
+  // ── MULTI-SELECT — tick all that apply ──────────────────────────────────────
+  // expectedAnswer = array of ALL correct options
+  // Scoring:
+  //   Full points  → all correct selected AND no wrong selected
+  //   Partial pts  → some correct selected, no wrong selected
+  //   Zero pts     → any wrong option selected
   {
     id: "q4",
-    type: "choice",
-    title: "Spot the Bug in the Screenshot and become a INSTANT Icon",
-    description: "Look at the Payment data in the image below. What is the bug?",
+    type: "multi",
+    title: "Spot the Bug in the Screenshot and become an INSTANT Icon",
+    description: "Look at the Payment data in the image below.\nSelect ALL the bugs you can find:",
     imageUrl: "/react-yfubbvmv/SEPAIP.png",
-    hint: "Look closely at the DATA being used.",
+    hint: "Look closely at the DATA being used. There may be more than one bug!",
     options: [
       "Creditor can not be DNB Norway (creditor)",
       "Currency should be EUR , no exchange allowed (currency)",
       "Date should be today's date",
-      "both structured remittance and unstructured remittance present",
+      "Both structured remittance and unstructured remittance present",
       "NO Bug! Everything looks ok",
     ],
-    expectedAnswer: ["Creditor can not be DNB Norway (creditor)", "Currency should be EUR , no exchange allowed (currency)", "Date should be today's date", "both structured remittance and unstructured remittance present"],
+    expectedAnswer: [
+      "Creditor can not be DNB Norway (creditor)",
+      "Currency should be EUR , no exchange allowed (currency)",
+      "Date should be today's date",
+      "Both structured remittance and unstructured remittance present",
+    ],
     points: 150,
   },
 
-  // ── Drag & drop order ───────────────────────────────────────────────────────
   {
     id: "q5",
     type: "order",
@@ -104,7 +109,6 @@ const QUESTIONS_CONFIG = [
     points: 200,
   },
 
-  // ── Image + text answer ─────────────────────────────────────────────────────
   {
     id: "q6",
     type: "text",
@@ -116,7 +120,6 @@ const QUESTIONS_CONFIG = [
     points: 150,
   },
 
-  // ── Multiple choice ─────────────────────────────────────────────────────────
   {
     id: "q7",
     type: "choice",
@@ -138,7 +141,6 @@ const QUESTIONS_CONFIG = [
 // END QUESTIONS
 // =============================================================================
 
-// ─── Firebase helpers ─────────────────────────────────────────────────────────
 const db = {
   async get(path) {
     const res = await fetch(FIREBASE_URL + "/" + path + ".json");
@@ -155,23 +157,69 @@ const db = {
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 const ScoringEngine = {
+  // Returns { correct: bool, pointsAwarded: number, feedback: string }
   evaluate(question, answer) {
     const clean = (s) => s.trim().toLowerCase().replace(/['"`;]/g, "");
 
-    // Drag & drop — match exact index order
+    // Drag & drop
     if (question.type === "order") {
-      return answer.trim() === question.expectedAnswer.trim();
+      const correct = answer.trim() === question.expectedAnswer.trim();
+      return {
+        correct,
+        pointsAwarded: correct ? question.points : 0,
+        feedback: correct ? "Perfect order!" : "Not quite right — try again.",
+      };
     }
 
-    // Multiple valid answers
+    // Multi-select scoring
+    if (question.type === "multi") {
+      const selected = answer; // array of selected option strings
+      const correct = question.expectedAnswer;
+      const wrongPicks = selected.filter((s) => !correct.includes(s));
+      const rightPicks = selected.filter((s) => correct.includes(s));
+
+      if (wrongPicks.length > 0) {
+        // Any wrong pick = zero points
+        return {
+          correct: false,
+          pointsAwarded: 0,
+          feedback: "You selected " + wrongPicks.length + " wrong option(s). 0 pts.",
+        };
+      }
+
+      // Partial scoring: pts per correct answer selected
+      const ptsEach = Math.floor(question.points / correct.length);
+      const awarded = ptsEach * rightPicks.length;
+      const allCorrect = rightPicks.length === correct.length;
+
+      return {
+        correct: allCorrect,
+        pointsAwarded: awarded,
+        feedback: allCorrect
+          ? "All " + correct.length + " bugs found! +" + awarded + " pts"
+          : "Found " + rightPicks.length + "/" + correct.length + " bugs. +" + awarded + " pts — keep looking!",
+      };
+    }
+
+    // Text answer — array of valid answers
     if (Array.isArray(question.expectedAnswer)) {
-      return question.expectedAnswer.some(
+      const correct = question.expectedAnswer.some(
         (valid) => clean(answer) === clean(valid)
       );
+      return {
+        correct,
+        pointsAwarded: correct ? question.points : 0,
+        feedback: correct ? "Correct!" : "Not quite.",
+      };
     }
 
-    // Single answer
-    return clean(answer) === clean(question.expectedAnswer);
+    // Single text / choice answer
+    const correct = clean(answer) === clean(question.expectedAnswer);
+    return {
+      correct,
+      pointsAwarded: correct ? question.points : 0,
+      feedback: correct ? "Correct!" : "Not quite.",
+    };
   },
 };
 
@@ -181,7 +229,7 @@ const S = [
   "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
   ":root{",
   "  --bg:#07090a;--surface:#0d1214;--surface2:#111a1c;--border:#1c2a2e;",
-  "  --accent:#00e5ff;--good:#00ff9d;--bad:#ff4060;--gold:#ffd700;--purple:#b06aff;",
+  "  --accent:#00e5ff;--good:#00ff9d;--bad:#ff4060;--gold:#ffd700;--purple:#b06aff;--teal:#00c8a0;",
   "  --text:#b8cdd0;--dim:#4a6a70;--bright:#dff0f3;",
   "  --mono:'Space Mono',monospace;--display:'Orbitron',monospace;",
   "}",
@@ -217,6 +265,7 @@ const S = [
   ".type-badge{display:inline-block;font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:3px 8px;border:1px solid;margin-bottom:10px}",
   ".type-badge.text{border-color:var(--accent);color:var(--accent)}",
   ".type-badge.choice{border-color:var(--purple);color:var(--purple)}",
+  ".type-badge.multi{border-color:var(--teal);color:var(--teal)}",
   ".type-badge.order{border-color:var(--gold);color:var(--gold)}",
   ".qcard{background:var(--surface);border:1px solid var(--border);padding:18px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:14px;margin-bottom:10px}",
   ".qcard:hover:not(.solved){border-color:var(--accent);transform:translateX(3px)}",
@@ -231,11 +280,12 @@ const S = [
   ".dtitle{font-family:var(--display);font-size:12px;color:var(--accent);letter-spacing:2px;margin-bottom:14px}",
   ".code{background:#040607;border:1px solid var(--border);border-left:3px solid var(--accent);padding:14px 18px;font-size:11px;line-height:1.9;color:#7ab0b8;white-space:pre-wrap;margin:10px 0;overflow-x:auto}",
   ".hint{border:1px solid rgba(255,215,0,.2);background:rgba(255,215,0,.03);padding:10px 14px;font-size:10px;color:#9a8040;margin:10px 0}",
-  ".q-image{width:100%;max-height:260px;object-fit:contain;border:1px solid var(--border);margin:12px 0;background:#040607}",
+  ".q-image{width:100%;max-height:320px;object-fit:contain;border:1px solid var(--border);margin:12px 0;background:#040607}",
   ".valid-hint{font-size:9px;color:var(--dim);margin-top:6px;letter-spacing:1px}",
   ".arow{display:flex;gap:8px;margin-top:14px}",
   ".ainp{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--bright);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;transition:border-color .2s}",
   ".ainp:focus{border-color:var(--accent)}",
+  "/* single choice */",
   ".choices{display:flex;flex-direction:column;gap:8px;margin-top:14px}",
   ".choice-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:12px 16px;cursor:pointer;text-align:left;transition:all .2s;letter-spacing:.5px}",
   ".choice-btn:hover{border-color:var(--purple);color:var(--bright);background:#13101e}",
@@ -243,6 +293,20 @@ const S = [
   ".choice-btn.correct{border-color:var(--good);color:var(--good);background:rgba(0,255,157,.07)}",
   ".choice-btn.wrong{border-color:var(--bad);color:var(--bad);background:rgba(255,64,96,.07)}",
   ".choice-submit{margin-top:10px}",
+  "/* multi select */",
+  ".multi-label{font-size:9px;letter-spacing:3px;color:var(--teal);margin-bottom:10px;text-transform:uppercase}",
+  ".multi-choices{display:flex;flex-direction:column;gap:8px;margin-top:10px}",
+  ".multi-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:12px 16px;cursor:pointer;text-align:left;transition:all .2s;letter-spacing:.5px;display:flex;align-items:center;gap:12px}",
+  ".multi-btn:hover:not(:disabled){border-color:var(--teal);color:var(--bright);background:#0a1e1e}",
+  ".multi-btn.checked{border-color:var(--teal);color:var(--teal);background:rgba(0,200,160,.08)}",
+  ".multi-btn.reveal-correct{border-color:var(--good);color:var(--good);background:rgba(0,255,157,.07)}",
+  ".multi-btn.reveal-wrong{border-color:var(--bad);color:var(--bad);background:rgba(255,64,96,.07)}",
+  ".multi-btn.reveal-missed{border-color:var(--gold);color:var(--gold);background:rgba(255,215,0,.05)}",
+  ".checkbox{width:16px;height:16px;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px}",
+  ".multi-counter{font-size:9px;color:var(--teal);margin-top:8px;letter-spacing:2px}",
+  ".multi-submit{margin-top:12px}",
+  ".partial-score{font-size:10px;color:var(--gold);margin-top:6px;letter-spacing:1px}",
+  "/* drag & drop */",
   ".order-wrap{margin-top:14px}",
   ".order-label{font-size:9px;letter-spacing:3px;color:var(--dim);margin-bottom:10px;text-transform:uppercase}",
   ".blocks-list{display:flex;flex-direction:column;gap:6px}",
@@ -252,6 +316,7 @@ const S = [
   ".order-submit{margin-top:12px}",
   ".res{padding:11px 14px;margin-top:10px;font-size:11px;letter-spacing:1px;animation:si .3s ease}",
   ".res.good{background:rgba(0,255,157,.07);border:1px solid rgba(0,255,157,.3);color:var(--good)}",
+  ".res.partial{background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.3);color:var(--gold)}",
   ".res.bad{background:rgba(255,64,96,.07);border:1px solid rgba(255,64,96,.3);color:var(--bad)}",
   "@keyframes si{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}",
   ".pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:6px;animation:bpulse 2s infinite;vertical-align:middle}",
@@ -261,13 +326,11 @@ const S = [
 // ─── Text Answer ──────────────────────────────────────────────────────────────
 function TextAnswer({ question, onSubmit, submitting }) {
   const [answer, setAnswer] = useState("");
-  const isArray = Array.isArray(question.expectedAnswer);
-
   return (
     <div>
-      {isArray && (
+      {Array.isArray(question.expectedAnswer) && (
         <div className="valid-hint">
-          Accepted answers: {question.expectedAnswer.join(" / ")}
+          Accepted: {question.expectedAnswer.join(" / ")}
         </div>
       )}
       <div className="arow">
@@ -278,11 +341,8 @@ function TextAnswer({ question, onSubmit, submitting }) {
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && answer.trim() && onSubmit(answer)}
         />
-        <button
-          className="btn"
-          onClick={() => onSubmit(answer)}
-          disabled={submitting || !answer.trim()}
-        >
+        <button className="btn" onClick={() => onSubmit(answer)}
+          disabled={submitting || !answer.trim()}>
           {submitting ? "Saving..." : "Submit"}
         </button>
       </div>
@@ -290,8 +350,8 @@ function TextAnswer({ question, onSubmit, submitting }) {
   );
 }
 
-// ─── Multiple Choice ──────────────────────────────────────────────────────────
-function MultipleChoice({ question, onSubmit, submitting, result }) {
+// ─── Single Choice ────────────────────────────────────────────────────────────
+function SingleChoice({ question, onSubmit, submitting, result }) {
   const [selected, setSelected] = useState(null);
 
   const btnClass = (opt) => {
@@ -305,12 +365,10 @@ function MultipleChoice({ question, onSubmit, submitting, result }) {
     <div>
       <div className="choices">
         {question.options.map((opt, i) => (
-          <button
-            key={i}
+          <button key={i}
             className={"choice-btn " + btnClass(opt)}
             onClick={() => !result && setSelected(opt)}
-            disabled={!!result}
-          >
+            disabled={!!result}>
             <span style={{ color: "var(--dim)", marginRight: 10 }}>
               {String.fromCharCode(65 + i)}.
             </span>
@@ -319,13 +377,78 @@ function MultipleChoice({ question, onSubmit, submitting, result }) {
         ))}
       </div>
       {!result && (
-        <button
-          className="btn choice-submit"
-          onClick={() => onSubmit(selected)}
-          disabled={submitting || !selected}
-        >
+        <button className="btn choice-submit" onClick={() => onSubmit(selected)}
+          disabled={submitting || !selected}>
           {submitting ? "Saving..." : "Submit"}
         </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Multi Select ─────────────────────────────────────────────────────────────
+function MultiSelect({ question, onSubmit, submitting, result }) {
+  const [checked, setChecked] = useState([]);
+
+  const toggle = (opt) => {
+    if (result) return;
+    setChecked((prev) =>
+      prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
+    );
+  };
+
+  const btnClass = (opt) => {
+    if (!result) return checked.includes(opt) ? "checked" : "";
+    const isCorrect = question.expectedAnswer.includes(opt);
+    const isSelected = checked.includes(opt);
+    if (isCorrect && isSelected) return "reveal-correct";   // ticked + right ✅
+    if (!isCorrect && isSelected) return "reveal-wrong";    // ticked + wrong ❌
+    if (isCorrect && !isSelected) return "reveal-missed";   // missed correct 🟡
+    return "";
+  };
+
+  const revealIcon = (opt) => {
+    if (!result) return checked.includes(opt) ? "✓" : "";
+    const isCorrect = question.expectedAnswer.includes(opt);
+    const isSelected = checked.includes(opt);
+    if (isCorrect && isSelected) return "✓";
+    if (!isCorrect && isSelected) return "✗";
+    if (isCorrect && !isSelected) return "!";
+    return "";
+  };
+
+  return (
+    <div>
+      <div className="multi-label">Select ALL that apply</div>
+      <div className="multi-choices">
+        {question.options.map((opt, i) => (
+          <button key={i}
+            className={"multi-btn " + btnClass(opt)}
+            onClick={() => toggle(opt)}
+            disabled={!!result}>
+            <div className="checkbox">{revealIcon(opt)}</div>
+            <span style={{ color: "var(--dim)", marginRight: 6, flexShrink: 0 }}>
+              {String.fromCharCode(65 + i)}.
+            </span>
+            {opt}
+          </button>
+        ))}
+      </div>
+      {!result && (
+        <div>
+          <div className="multi-counter">
+            {checked.length} selected — select all bugs you can find
+          </div>
+          <button className="btn multi-submit" onClick={() => onSubmit(checked)}
+            disabled={submitting || checked.length === 0}>
+            {submitting ? "Checking..." : "Submit Selection"}
+          </button>
+        </div>
+      )}
+      {result && (
+        <div className="multi-counter" style={{ marginTop: 8 }}>
+          ✓ correct  ✗ wrong pick  ! missed
+        </div>
       )}
     </div>
   );
@@ -334,13 +457,10 @@ function MultipleChoice({ question, onSubmit, submitting, result }) {
 // ─── Drag & Drop Order ────────────────────────────────────────────────────────
 function DragOrderAnswer({ question, onSubmit, submitting, result }) {
   const [blocks, setBlocks] = useState(() =>
-    question.blocks
-      .map((text, i) => ({ id: i, text }))
-      .sort(() => Math.random() - 0.5)
+    question.blocks.map((text, i) => ({ id: i, text })).sort(() => Math.random() - 0.5)
   );
   const dragIdx = useRef(null);
 
-  const handleDragStart = (i) => { dragIdx.current = i; };
   const handleDrop = (i) => {
     const updated = [...blocks];
     const dragged = updated.splice(dragIdx.current, 1)[0];
@@ -350,38 +470,30 @@ function DragOrderAnswer({ question, onSubmit, submitting, result }) {
   };
 
   const getAnswer = () => blocks.map((b) => b.id).join(",");
-  const isCorrect = result && result.correct;
-  const isWrong = result && !result.correct;
 
   return (
     <div className="order-wrap">
       <div className="order-label">Drag blocks into the correct order</div>
       <div className="blocks-list">
         {blocks.map((block, i) => (
-          <div
-            key={block.id}
-            className="block-item"
+          <div key={block.id} className="block-item"
             draggable={!result}
-            onDragStart={() => handleDragStart(i)}
+            onDragStart={() => { dragIdx.current = i; }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => handleDrop(i)}
             style={
-              isCorrect ? { borderColor: "var(--good)", color: "var(--good)" }
-              : isWrong ? { borderColor: "var(--bad)", color: "var(--bad)" }
+              result && result.correct ? { borderColor: "var(--good)", color: "var(--good)" }
+              : result ? { borderColor: "var(--bad)", color: "var(--bad)" }
               : {}
-            }
-          >
+            }>
             <span className="block-handle">⠿</span>
             {block.text}
           </div>
         ))}
       </div>
       {!result && (
-        <button
-          className="btn order-submit"
-          onClick={() => onSubmit(getAnswer())}
-          disabled={submitting}
-        >
+        <button className="btn order-submit" onClick={() => onSubmit(getAnswer())}
+          disabled={submitting}>
           {submitting ? "Checking..." : "Submit Order"}
         </button>
       )}
@@ -393,9 +505,14 @@ function DragOrderAnswer({ question, onSubmit, submitting, result }) {
 function QuestionDetail({ question, onAnswer, submitting, result }) {
   const typeLabel = {
     text: "Text Answer",
-    choice: "Multiple Choice",
+    choice: "Single Choice",
+    multi: "Multi-Select",
     order: "Drag & Drop",
   };
+
+  const resClass = result
+    ? (result.correct ? "good" : result.pointsAwarded > 0 ? "partial" : "bad")
+    : "";
 
   return (
     <div className="card dtl">
@@ -410,11 +527,9 @@ function QuestionDetail({ question, onAnswer, submitting, result }) {
       {question.imageUrl && (
         <img src={question.imageUrl} alt="Question" className="q-image" />
       )}
-
       {question.description && (
         <pre className="code">{question.description}</pre>
       )}
-
       {question.hint && (
         <div className="hint">Hint: {question.hint}</div>
       )}
@@ -423,25 +538,21 @@ function QuestionDetail({ question, onAnswer, submitting, result }) {
         <TextAnswer question={question} onSubmit={onAnswer} submitting={submitting} />
       )}
       {question.type === "choice" && (
-        <MultipleChoice
-          question={question}
-          onSubmit={onAnswer}
-          submitting={submitting}
-          result={result}
-        />
+        <SingleChoice question={question} onSubmit={onAnswer} submitting={submitting} result={result} />
+      )}
+      {question.type === "multi" && (
+        <MultiSelect question={question} onSubmit={onAnswer} submitting={submitting} result={result} />
       )}
       {question.type === "order" && (
-        <DragOrderAnswer
-          question={question}
-          onSubmit={onAnswer}
-          submitting={submitting}
-          result={result}
-        />
+        <DragOrderAnswer question={question} onSubmit={onAnswer} submitting={submitting} result={result} />
       )}
 
       {result && (
-        <div className={"res " + (result.correct ? "good" : "bad")}>
-          {result.message}
+        <div className={"res " + resClass}>
+          {result.feedback}
+          {result.pointsAwarded > 0 && !result.correct && (
+            <div className="partial-score">+{result.pointsAwarded} pts awarded (partial)</div>
+          )}
         </div>
       )}
     </div>
@@ -469,12 +580,14 @@ export default function GameApp() {
   const typeBadgeColor = (type) => {
     if (type === "text") return "var(--accent)";
     if (type === "choice") return "var(--purple)";
+    if (type === "multi") return "var(--teal)";
     if (type === "order") return "var(--gold)";
     return "var(--accent)";
   };
   const typeIcon = (type) => {
     if (type === "text") return "✏";
     if (type === "choice") return "◉";
+    if (type === "multi") return "☑";
     if (type === "order") return "⠿";
     return "✏";
   };
@@ -490,19 +603,12 @@ export default function GameApp() {
         const taken = Object.values(existing).some(
           (p) => p.name.toLowerCase() === trimmed.toLowerCase()
         );
-        if (taken) {
-          setRegError("That name is taken. Choose another.");
-          setRegistering(false);
-          return;
-        }
+        if (taken) { setRegError("That name is taken. Choose another."); setRegistering(false); return; }
       }
       const newPlayer = {
         id: "p_" + Date.now(),
-        name: trimmed,
-        score: 0,
-        attempts: 0,
-        correctAnswers: 0,
-        joinedAt: new Date().toISOString(),
+        name: trimmed, score: 0, attempts: 0,
+        correctAnswers: 0, joinedAt: new Date().toISOString(),
       };
       await db.set("players/" + newPlayer.id, newPlayer);
       setPlayer(newPlayer);
@@ -512,33 +618,29 @@ export default function GameApp() {
     setRegistering(false);
   };
 
-  const handleSelect = (q) => {
-    if (solvedIds.includes(q.id)) return;
-    setSelected(q);
-  };
-
   const handleAnswer = async (answer) => {
-    if (!answer || !selected || submitting) return;
+    if (!selected || submitting) return;
+    if (!answer || (Array.isArray(answer) && answer.length === 0)) return;
     setSubmitting(true);
+
     const question = QUESTIONS_CONFIG.find((q) => q.id === selected.id);
-    const correct = ScoringEngine.evaluate(question, answer);
-    const pts = correct ? question.points : 0;
+    const evaluation = ScoringEngine.evaluate(question, answer);
+
     const updated = {
       ...player,
       attempts: player.attempts + 1,
-      score: player.score + pts,
-      correctAnswers: player.correctAnswers + (correct ? 1 : 0),
+      score: player.score + evaluation.pointsAwarded,
+      correctAnswers: player.correctAnswers + (evaluation.correct ? 1 : 0),
     };
     await db.set("players/" + player.id, updated);
     setPlayer(updated);
-    const result = {
-      correct,
-      message: correct
-        ? "+" + pts + " pts — Bug squashed!"
-        : "Not quite. The bug is still lurking...",
-    };
-    setResults((prev) => Object.assign({}, prev, { [selected.id]: result }));
-    if (correct) setSolvedIds((prev) => [...prev, selected.id]);
+
+    setResults((prev) => Object.assign({}, prev, { [selected.id]: evaluation }));
+
+    // Mark as solved if fully correct OR partial points earned (question attempted)
+    if (evaluation.correct || evaluation.pointsAwarded > 0) {
+      setSolvedIds((prev) => [...prev, selected.id]);
+    }
     setSubmitting(false);
   };
 
@@ -555,51 +657,39 @@ export default function GameApp() {
           <div className="card">
             <div className="rtitle">Initialize Player</div>
             <p className="rdesc">
-              Welcome to Bug Hunt. Answer text, image, multiple choice
-              and drag-and-drop questions to earn points.
+              Welcome to Bug Hunt. Answer text, image, single choice,
+              multi-select and drag-and-drop questions to earn points.
               Scores sync live to the leaderboard on any device.
             </p>
             <label className="lbl">Callsign</label>
-            <input
-              className="inp"
-              placeholder="e.g. nullPointerNinja"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleRegister()}
-              autoFocus
-            />
+            <input className="inp" placeholder="e.g. nullPointerNinja"
+              value={name} onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleRegister()} autoFocus />
             {regError && <div className="err">{regError}</div>}
             <div className="mt14">
-              <button
-                className="btn"
-                onClick={handleRegister}
-                disabled={registering || !name.trim()}
-              >
+              <button className="btn" onClick={handleRegister}
+                disabled={registering || !name.trim()}>
                 {registering ? "Connecting..." : "Enter the Arena"}
               </button>
             </div>
           </div>
         </div>
-
         <div className="card" style={{ maxWidth: 460, margin: "0 auto" }}>
           <div style={{ fontSize: 9, letterSpacing: 3, color: "var(--dim)", marginBottom: 12 }}>
-            QUESTION TYPES IN THIS GAME
+            QUESTION TYPES
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {["text", "choice", "order"].map((type) => (
+            {["text", "choice", "multi", "order"].map((type) => (
               <div key={type} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11 }}>
                 <span style={{ color: typeBadgeColor(type), fontSize: 14 }}>{typeIcon(type)}</span>
                 <span style={{ color: "var(--text)" }}>
-                  {type === "text" && "Text Answer — type your answer"}
-                  {type === "choice" && "Multiple Choice — pick the right option"}
-                  {type === "order" && "Drag & Drop — arrange blocks in order"}
+                  {type === "text" && "Text — type your answer"}
+                  {type === "choice" && "Single Choice — pick one option"}
+                  {type === "multi" && "Multi-Select — tick all that apply (partial scoring)"}
+                  {type === "order" && "Drag & Drop — arrange in order"}
                 </span>
               </div>
             ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11 }}>
-              <span style={{ fontSize: 14 }}>IMG</span>
-              <span style={{ color: "var(--text)" }}>Image — visual clue included</span>
-            </div>
           </div>
         </div>
       </div>
@@ -613,27 +703,15 @@ export default function GameApp() {
       <div className="wrap">
         <div className="hdr">
           <div className="logo">BUG HUNT</div>
-          <div className="logo-sub">
-            <span className="pulse" />
-            Live via Firebase
-          </div>
+          <div className="logo-sub"><span className="pulse" />Live via Firebase</div>
         </div>
         <nav className="nav">
           <button className="ntab on">Arena</button>
-          <button
-            className="ntab"
-            style={{ marginLeft: "auto" }}
-            onClick={() => {
-              setPlayer(null);
-              setSolvedIds([]);
-              setSelected(null);
-              setResults({});
-            }}
-          >
+          <button className="ntab" style={{ marginLeft: "auto" }}
+            onClick={() => { setPlayer(null); setSolvedIds([]); setSelected(null); setResults({}); }}>
             {player.name}
           </button>
         </nav>
-
         <div className="sbar">
           <div className="stat"><div className="sv">{player.score}</div><div className="sl2">Score</div></div>
           <div className="stat"><div className="sv">{player.correctAnswers}</div><div className="sl2">Solved</div></div>
@@ -649,7 +727,7 @@ export default function GameApp() {
             <div key={q.id}>
               <div
                 className={"qcard" + (isSolved ? " solved" : "") + (isActive ? " active" : "")}
-                onClick={() => handleSelect(q)}
+                onClick={() => { if (!isSolved) setSelected(q); }}
               >
                 <div className="qpts">{q.points}<br />PTS</div>
                 <div style={{ flex: 1 }}>
@@ -658,19 +736,14 @@ export default function GameApp() {
                     <span style={{ fontSize: 10, color: typeBadgeColor(q.type) }}>
                       {typeIcon(q.type)} {q.type.toUpperCase()}
                     </span>
-                    {q.imageUrl && (
-                      <span style={{ fontSize: 10, color: "var(--good)" }}>IMG</span>
-                    )}
+                    {q.imageUrl && <span style={{ fontSize: 10, color: "var(--good)" }}>IMG</span>}
                     <span className={"qstatus" + (isSolved ? " ok" : "")}>
                       {isSolved ? "SOLVED" : "UNSOLVED"}
                     </span>
                   </div>
                 </div>
-                {!isSolved && (
-                  <div style={{ color: "var(--dim)", fontSize: 12 }}>→</div>
-                )}
+                {!isSolved && <div style={{ color: "var(--dim)", fontSize: 12 }}>→</div>}
               </div>
-
               {isActive && !isSolved && (
                 <QuestionDetail
                   question={q}
