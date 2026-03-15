@@ -4,7 +4,7 @@
  *   "text"   — type your answer (expectedAnswer: string or array of valid strings)
  *   "choice" — single correct answer (expectedAnswer: string)
  *   "multi"  — multiple correct answers, tick all that apply (expectedAnswer: array)
- *              Scoring: partial points per correct selection, penalty for wrong picks
+ *              Scoring: partial points per correct selection, zero for wrong picks
  *   "order"  — drag and drop code blocks (expectedAnswer: "0,1,2,3")
  *   any type + imageUrl — shows image above question
  */
@@ -15,6 +15,8 @@ const FIREBASE_URL = "https://bughunt-e86fb-default-rtdb.europe-west1.firebaseda
 
 // =============================================================================
 // ADD / EDIT QUESTIONS HERE
+// IMPORTANT: Use straight quotes only " and ' — never curly quotes like " " or ' '
+// Use \n for line breaks inside strings. Do NOT use backtick strings.
 // =============================================================================
 const QUESTIONS_CONFIG = [
 
@@ -32,8 +34,8 @@ const QUESTIONS_CONFIG = [
     id: "q2",
     type: "choice",
     title: "The Statement Trap",
-    description: "As a QA you are expecting Camt.054D message that needs to be delivered to the customer, But you do not find anything in the downstream applications. Which application you will look at? ",
-    hint: "Look at the application which generates statements",
+    description: "As a QA you are expecting Camt.054D message that needs to be delivered to the customer, but you do not find anything in the downstream applications. Which application will you look at?",
+    hint: "Look at the application which generates statements.",
     options: [
       "821",
       "PAS",
@@ -61,12 +63,6 @@ const QUESTIONS_CONFIG = [
     points: 200,
   },
 
-  // ── MULTI-SELECT — tick all that apply ──────────────────────────────────────
-  // expectedAnswer = array of ALL correct options
-  // Scoring:
-  //   Full points  → all correct selected AND no wrong selected
-  //   Partial pts  → some correct selected, no wrong selected
-  //   Zero pts     → any wrong option selected
   {
     id: "q4",
     type: "multi",
@@ -76,26 +72,26 @@ const QUESTIONS_CONFIG = [
     hint: "Look closely at the DATA being used. There may be more than one bug!",
     options: [
       "Creditor can not be DNB Norway (creditor)",
-      "Currency should be EUR , no exchange allowed (currency)",
+      "Currency should be EUR, no exchange allowed (currency)",
       "Date should be today's date",
       "Both structured remittance and unstructured remittance present",
       "NO Bug! Everything looks ok",
     ],
     expectedAnswer: [
       "Creditor can not be DNB Norway (creditor)",
-      "Currency should be EUR , no exchange allowed (currency)",
+      "Currency should be EUR, no exchange allowed (currency)",
       "Date should be today's date",
       "Both structured remittance and unstructured remittance present",
     ],
     points: 150,
   },
-  
+
   {
     id: "q5",
     type: "choice",
     title: "The Bug Terminator",
-    description: "Why does this RIX payments message fail business rules although it matches the schema? \n <ClrSysRef>RIX</ClrSysRef> \n <IntrBkSttlmAmt Ccy="EUR">34000</IntrBkSttlmAmt>",
-    hint: "Look at the tags carefully",
+    description: "Why does this RIX payments message fail business rules although it matches the schema?\n\n  <ClrSysRef>RIX</ClrSysRef>\n  <IntrBkSttlmAmt Ccy=\"EUR\">34000</IntrBkSttlmAmt>",
+    hint: "Look at the tags carefully.",
     options: [
       "Allows Swedish Krone currency only",
       "Allows EURO and Swedish Krone currency",
@@ -127,11 +123,9 @@ const db = {
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 const ScoringEngine = {
-  // Returns { correct: bool, pointsAwarded: number, feedback: string }
   evaluate(question, answer) {
     const clean = (s) => s.trim().toLowerCase().replace(/['"`;]/g, "");
 
-    // Drag & drop
     if (question.type === "order") {
       const correct = answer.trim() === question.expectedAnswer.trim();
       return {
@@ -141,15 +135,13 @@ const ScoringEngine = {
       };
     }
 
-    // Multi-select scoring
     if (question.type === "multi") {
-      const selected = answer; // array of selected option strings
+      const selected = answer;
       const correct = question.expectedAnswer;
       const wrongPicks = selected.filter((s) => !correct.includes(s));
       const rightPicks = selected.filter((s) => correct.includes(s));
 
       if (wrongPicks.length > 0) {
-        // Any wrong pick = zero points
         return {
           correct: false,
           pointsAwarded: 0,
@@ -157,7 +149,6 @@ const ScoringEngine = {
         };
       }
 
-      // Partial scoring: pts per correct answer selected
       const ptsEach = Math.floor(question.points / correct.length);
       const awarded = ptsEach * rightPicks.length;
       const allCorrect = rightPicks.length === correct.length;
@@ -171,7 +162,6 @@ const ScoringEngine = {
       };
     }
 
-    // Text answer — array of valid answers
     if (Array.isArray(question.expectedAnswer)) {
       const correct = question.expectedAnswer.some(
         (valid) => clean(answer) === clean(valid)
@@ -183,7 +173,6 @@ const ScoringEngine = {
       };
     }
 
-    // Single text / choice answer
     const correct = clean(answer) === clean(question.expectedAnswer);
     return {
       correct,
@@ -255,7 +244,6 @@ const S = [
   ".arow{display:flex;gap:8px;margin-top:14px}",
   ".ainp{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--bright);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;transition:border-color .2s}",
   ".ainp:focus{border-color:var(--accent)}",
-  "/* single choice */",
   ".choices{display:flex;flex-direction:column;gap:8px;margin-top:14px}",
   ".choice-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:12px 16px;cursor:pointer;text-align:left;transition:all .2s;letter-spacing:.5px}",
   ".choice-btn:hover{border-color:var(--purple);color:var(--bright);background:#13101e}",
@@ -263,7 +251,6 @@ const S = [
   ".choice-btn.correct{border-color:var(--good);color:var(--good);background:rgba(0,255,157,.07)}",
   ".choice-btn.wrong{border-color:var(--bad);color:var(--bad);background:rgba(255,64,96,.07)}",
   ".choice-submit{margin-top:10px}",
-  "/* multi select */",
   ".multi-label{font-size:9px;letter-spacing:3px;color:var(--teal);margin-bottom:10px;text-transform:uppercase}",
   ".multi-choices{display:flex;flex-direction:column;gap:8px;margin-top:10px}",
   ".multi-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:12px 16px;cursor:pointer;text-align:left;transition:all .2s;letter-spacing:.5px;display:flex;align-items:center;gap:12px}",
@@ -276,7 +263,6 @@ const S = [
   ".multi-counter{font-size:9px;color:var(--teal);margin-top:8px;letter-spacing:2px}",
   ".multi-submit{margin-top:12px}",
   ".partial-score{font-size:10px;color:var(--gold);margin-top:6px;letter-spacing:1px}",
-  "/* drag & drop */",
   ".order-wrap{margin-top:14px}",
   ".order-label{font-size:9px;letter-spacing:3px;color:var(--dim);margin-bottom:10px;text-transform:uppercase}",
   ".blocks-list{display:flex;flex-direction:column;gap:6px}",
@@ -371,18 +357,18 @@ function MultiSelect({ question, onSubmit, submitting, result }) {
     if (!result) return checked.includes(opt) ? "checked" : "";
     const isCorrect = question.expectedAnswer.includes(opt);
     const isSelected = checked.includes(opt);
-    if (isCorrect && isSelected) return "reveal-correct";   // ticked + right ✅
-    if (!isCorrect && isSelected) return "reveal-wrong";    // ticked + wrong ❌
-    if (isCorrect && !isSelected) return "reveal-missed";   // missed correct 🟡
+    if (isCorrect && isSelected) return "reveal-correct";
+    if (!isCorrect && isSelected) return "reveal-wrong";
+    if (isCorrect && !isSelected) return "reveal-missed";
     return "";
   };
 
   const revealIcon = (opt) => {
-    if (!result) return checked.includes(opt) ? "✓" : "";
+    if (!result) return checked.includes(opt) ? "+" : "";
     const isCorrect = question.expectedAnswer.includes(opt);
     const isSelected = checked.includes(opt);
-    if (isCorrect && isSelected) return "✓";
-    if (!isCorrect && isSelected) return "✗";
+    if (isCorrect && isSelected) return "v";
+    if (!isCorrect && isSelected) return "x";
     if (isCorrect && !isSelected) return "!";
     return "";
   };
@@ -417,7 +403,7 @@ function MultiSelect({ question, onSubmit, submitting, result }) {
       )}
       {result && (
         <div className="multi-counter" style={{ marginTop: 8 }}>
-          ✓ correct  ✗ wrong pick  ! missed
+          v = correct  x = wrong pick  ! = missed
         </div>
       )}
     </div>
@@ -456,7 +442,7 @@ function DragOrderAnswer({ question, onSubmit, submitting, result }) {
               : result ? { borderColor: "var(--bad)", color: "var(--bad)" }
               : {}
             }>
-            <span className="block-handle">⠿</span>
+            <span className="block-handle">||</span>
             {block.text}
           </div>
         ))}
@@ -554,12 +540,13 @@ export default function GameApp() {
     if (type === "order") return "var(--gold)";
     return "var(--accent)";
   };
+
   const typeIcon = (type) => {
-    if (type === "text") return "✏";
-    if (type === "choice") return "◉";
-    if (type === "multi") return "☑";
-    if (type === "order") return "⠿";
-    return "✏";
+    if (type === "text") return "T";
+    if (type === "choice") return "O";
+    if (type === "multi") return "M";
+    if (type === "order") return "D";
+    return "T";
   };
 
   const handleRegister = async () => {
@@ -573,12 +560,19 @@ export default function GameApp() {
         const taken = Object.values(existing).some(
           (p) => p.name.toLowerCase() === trimmed.toLowerCase()
         );
-        if (taken) { setRegError("That name is taken. Choose another."); setRegistering(false); return; }
+        if (taken) {
+          setRegError("That name is taken. Choose another.");
+          setRegistering(false);
+          return;
+        }
       }
       const newPlayer = {
         id: "p_" + Date.now(),
-        name: trimmed, score: 0, attempts: 0,
-        correctAnswers: 0, joinedAt: new Date().toISOString(),
+        name: trimmed,
+        score: 0,
+        attempts: 0,
+        correctAnswers: 0,
+        joinedAt: new Date().toISOString(),
       };
       await db.set("players/" + newPlayer.id, newPlayer);
       setPlayer(newPlayer);
@@ -607,7 +601,6 @@ export default function GameApp() {
 
     setResults((prev) => Object.assign({}, prev, { [selected.id]: evaluation }));
 
-    // Mark as solved if fully correct OR partial points earned (question attempted)
     if (evaluation.correct || evaluation.pointsAwarded > 0) {
       setSolvedIds((prev) => [...prev, selected.id]);
     }
@@ -649,17 +642,21 @@ export default function GameApp() {
             QUESTION TYPES
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {["text", "choice", "multi", "order"].map((type) => (
-              <div key={type} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11 }}>
-                <span style={{ color: typeBadgeColor(type), fontSize: 14 }}>{typeIcon(type)}</span>
-                <span style={{ color: "var(--text)" }}>
-                  {type === "text" && "Text — type your answer"}
-                  {type === "choice" && "Single Choice — pick one option"}
-                  {type === "multi" && "Multi-Select — tick all that apply (partial scoring)"}
-                  {type === "order" && "Drag & Drop — arrange in order"}
-                </span>
-              </div>
-            ))}
+            {[
+              { type: "text", label: "Text — type your answer" },
+              { type: "choice", label: "Single Choice — pick one option" },
+              { type: "multi", label: "Multi-Select — tick all that apply (partial scoring)" },
+              { type: "order", label: "Drag and Drop — arrange in order" },
+            ].map(function(item) {
+              return (
+                <div key={item.type} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11 }}>
+                  <span style={{ color: typeBadgeColor(item.type), fontSize: 14, fontWeight: "bold" }}>
+                    {typeIcon(item.type)}
+                  </span>
+                  <span style={{ color: "var(--text)" }}>{item.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -673,12 +670,20 @@ export default function GameApp() {
       <div className="wrap">
         <div className="hdr">
           <div className="logo">BUG HUNT</div>
-          <div className="logo-sub"><span className="pulse" />Live via Firebase</div>
+          <div className="logo-sub">
+            <span className="pulse" />
+            Live via Firebase
+          </div>
         </div>
         <nav className="nav">
           <button className="ntab on">Arena</button>
           <button className="ntab" style={{ marginLeft: "auto" }}
-            onClick={() => { setPlayer(null); setSolvedIds([]); setSelected(null); setResults({}); }}>
+            onClick={() => {
+              setPlayer(null);
+              setSolvedIds([]);
+              setSelected(null);
+              setResults({});
+            }}>
             {player.name}
           </button>
         </nav>
@@ -703,16 +708,20 @@ export default function GameApp() {
                 <div style={{ flex: 1 }}>
                   <div className="qtitle">{q.title}</div>
                   <div className="qmeta">
-                    <span style={{ fontSize: 10, color: typeBadgeColor(q.type) }}>
+                    <span style={{ fontSize: 10, color: typeBadgeColor(q.type), fontWeight: "bold" }}>
                       {typeIcon(q.type)} {q.type.toUpperCase()}
                     </span>
-                    {q.imageUrl && <span style={{ fontSize: 10, color: "var(--good)" }}>IMG</span>}
+                    {q.imageUrl && (
+                      <span style={{ fontSize: 10, color: "var(--good)" }}>IMG</span>
+                    )}
                     <span className={"qstatus" + (isSolved ? " ok" : "")}>
                       {isSolved ? "SOLVED" : "UNSOLVED"}
                     </span>
                   </div>
                 </div>
-                {!isSolved && <div style={{ color: "var(--dim)", fontSize: 12 }}>→</div>}
+                {!isSolved && (
+                  <div style={{ color: "var(--dim)", fontSize: 12 }}>-&gt;</div>
+                )}
               </div>
               {isActive && !isSolved && (
                 <QuestionDetail
