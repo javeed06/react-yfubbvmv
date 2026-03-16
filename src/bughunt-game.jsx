@@ -311,12 +311,19 @@ const S = [
   /* ── Drag & drop ── */
   ".order-hint { font-size: 11px; font-weight: 600; color: var(--amber); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 10px; }",
   ".block-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }",
-  ".block-item { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.35); font-family: var(--mono); font-size: 12px; color: #94a3b8; cursor: grab; user-select: none; transition: all 0.15s; line-height: 1.5; }",
-  ".block-item:active { cursor: grabbing; transform: scale(0.99); }",
-  ".block-item.drag-correct { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.06); }",
-  ".block-item.drag-wrong { border-color: var(--rose); color: var(--rose); background: rgba(251,113,133,0.06); }",
-  ".grip-icon { flex-shrink: 0; color: var(--dim); }",
-
+  ".block-item { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.35); font-family: var(--mono); font-size: 12px; color: #94a3b8; cursor: pointer; user-select: none; transition: all 0.18s; line-height: 1.5; -webkit-tap-highlight-color: transparent; }",
+  ".block-item:active { transform: scale(0.98); }",
+  ".block-item.block-selected { border-color: var(--amber); background: rgba(251,191,36,0.12); color: var(--amber); box-shadow: 0 0 0 2px rgba(251,191,36,0.2); transform: scale(1.01); }",
+  ".block-item.block-target { border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.04); }",
+  ".block-item.drag-correct { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.06); cursor: default; }",
+  ".block-item.drag-wrong { border-color: var(--rose); color: var(--rose); background: rgba(251,113,133,0.06); cursor: default; }",
+  ".block-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--muted); font-family: var(--mono); transition: all 0.18s; }",
+  ".block-item.block-selected .block-num { background: rgba(251,191,36,0.15); border-color: var(--amber); color: var(--amber); }",
+  ".block-arrows { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }",
+  ".arrow-btn { width: 26px; height: 20px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; padding: 0; -webkit-tap-highlight-color: transparent; }",
+  ".arrow-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); color: var(--text); }",
+  ".arrow-btn:disabled { opacity: 0.2; cursor: default; }",
+  ".arrow-btn:active:not(:disabled) { transform: scale(0.9); }",
   /* ── Result banner ── */
   ".result-banner { border-radius: 12px; padding: 14px 16px; margin-top: 14px; font-size: 13px; font-weight: 600; display: flex; align-items: flex-start; gap: 10px; animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1); }",
   "@keyframes popIn { from { opacity: 0; transform: scale(0.95) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }",
@@ -485,49 +492,117 @@ function DragOrder({ question, onSubmit, submitting, result }) {
   const [blocks, setBlocks] = useState(() =>
     question.blocks.map((text, i) => ({ id: i, text })).sort(() => Math.random() - 0.5)
   );
+  // selectedIdx = the block currently picked up (tap-to-move)
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  // For desktop drag support
   const dragIdx = useRef(null);
 
-  const handleDrop = (i) => {
+  // Tap-to-move: first tap selects, second tap on target moves it
+  const handleTap = (i) => {
+    if (result) return;
+    if (selectedIdx === null) {
+      // Pick up this block
+      setSelectedIdx(i);
+    } else if (selectedIdx === i) {
+      // Tap same block = deselect
+      setSelectedIdx(null);
+    } else {
+      // Move selected block to this position
+      const updated = [...blocks];
+      const moved = updated.splice(selectedIdx, 1)[0];
+      updated.splice(i, 0, moved);
+      setBlocks(updated);
+      setSelectedIdx(null);
+    }
+  };
+
+  // Move block up/down with arrow buttons
+  const moveBlock = (i, dir) => {
+    const target = i + dir;
+    if (target < 0 || target >= blocks.length) return;
     const updated = [...blocks];
-    const dragged = updated.splice(dragIdx.current, 1)[0];
-    updated.splice(i, 0, dragged);
+    const tmp = updated[i];
+    updated[i] = updated[target];
+    updated[target] = tmp;
+    setBlocks(updated);
+  };
+
+  // Desktop drag handlers
+  const handleDragStart = (i) => { dragIdx.current = i; };
+  const handleDrop = (i) => {
+    if (dragIdx.current === null || dragIdx.current === i) return;
+    const updated = [...blocks];
+    const moved = updated.splice(dragIdx.current, 1)[0];
+    updated.splice(i, 0, moved);
     setBlocks(updated);
     dragIdx.current = null;
+    setSelectedIdx(null);
   };
 
   const getAnswer = () => blocks.map((b) => b.id).join(",");
 
-  const blockCls = () => {
-    if (!result) return "block-item";
-    return result.correct ? "block-item drag-correct" : "block-item drag-wrong";
+  const blockCls = (i) => {
+    if (result) return result.correct ? "block-item drag-correct" : "block-item drag-wrong";
+    if (selectedIdx === i) return "block-item block-selected";
+    if (selectedIdx !== null) return "block-item block-target";
+    return "block-item";
   };
 
   return (
     <div>
-      <div className="order-hint">Drag to reorder</div>
+      <div className="order-hint">
+        {selectedIdx !== null
+          ? "Now tap where to place it — or tap the same block to cancel"
+          : "Tap a block to pick it up, then tap where to place it"}
+      </div>
       <div className="block-list">
         {blocks.map((block, i) => (
-          <div key={block.id} className={blockCls()}
+          <div
+            key={block.id}
+            className={blockCls(i)}
+            onClick={() => handleTap(i)}
             draggable={!result}
-            onDragStart={() => { dragIdx.current = i; }}
+            onDragStart={() => handleDragStart(i)}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => handleDrop(i)}>
-            <div className="grip-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="9" cy="5" r="1" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="19" r="1" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="5" r="1" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="19" r="1" fill="currentColor" stroke="none"/>
-              </svg>
-            </div>
-            <span>{block.text}</span>
+            onDrop={() => handleDrop(i)}
+          >
+            {/* Position number */}
+            <div className="block-num">{i + 1}</div>
+            <span style={{ flex: 1 }}>{block.text}</span>
+            {/* Up/down arrows for accessibility */}
+            {!result && (
+              <div className="block-arrows" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="arrow-btn"
+                  onClick={() => moveBlock(i, -1)}
+                  disabled={i === 0}
+                  aria-label="Move up"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
+                </button>
+                <button
+                  className="arrow-btn"
+                  onClick={() => moveBlock(i, 1)}
+                  disabled={i === blocks.length - 1}
+                  aria-label="Move down"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
       {!result && (
-        <button className="btn-primary amber" onClick={() => onSubmit(getAnswer())} disabled={submitting}>
+        <button
+          className="btn-primary amber"
+          onClick={() => onSubmit(getAnswer())}
+          disabled={submitting}
+        >
           {submitting ? "Checking..." : "Submit Order"}
         </button>
       )}
@@ -787,8 +862,8 @@ function RegisterScreen({ onRegister }) {
       <div className="register-card">
         <div className="register-logo">
           <span className="logo-emoji">🐛</span>
-          <div className="big-logo">PAYMENTS AQA BUG HUNT</div>
-          <div className="tagline">Be a QA for a Day & Earn the points.</div>
+          <div className="big-logo">BUG HUNT</div>
+          <div className="tagline">Find the bugs. Earn the points.</div>
         </div>
 
         <label className="field-label">Your callsign</label>
